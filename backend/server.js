@@ -21,6 +21,8 @@ app.use(cors({
 
 app.use(express.json());
 
+app.use('/api/auth', authRoutes);
+
 // Initialize DynamoDB Client
 const client = new DynamoDBClient({
     region: process.env.AWS_REGION || 'us-east-1',
