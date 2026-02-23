@@ -6,8 +6,12 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 const ACTIVE_STATUSES = ['cargando', 'comunicando', 'whatsapp enviado', 'aceptado', 'analizando', 'esperando contrato'];
 const TERMINAL_STATUSES = ['finalizado', 'contrato recibido', 'rechazado', 'completado'];
 
+export function normalizeStatus(status) {
+    return (status || '').toLowerCase();
+}
+
 function isActiveStatus(status) {
-    const s = (status || '').toLowerCase();
+    const s = normalizeStatus(status);
     if (TERMINAL_STATUSES.includes(s)) return false;
     return true;
 }
@@ -23,7 +27,9 @@ export default function useMonitorData() {
     // Fetch executions from API
     const fetchExecutions = async () => {
         try {
-            const response = await axios.get(`${API_BASE_URL}/api/monitor`);
+            const response = await axios.get(`${API_BASE_URL}/api/monitor`, {
+                withCredentials: true
+            });
             if (response.data.success) {
                 setExecutions(response.data.executions);
                 setLastUpdate(new Date());
@@ -42,8 +48,9 @@ export default function useMonitorData() {
         fetchExecutions();
 
         const connectWebSocket = () => {
+            const wsToken = sessionStorage.getItem('wsToken');
             const wsUrl = API_BASE_URL.replace(/^http/, 'ws');
-            const ws = new WebSocket(wsUrl);
+            const ws = new WebSocket(wsUrl, ['access_token', wsToken]);
             wsRef.current = ws;
 
             ws.onopen = () => {
@@ -118,8 +125,8 @@ export default function useMonitorData() {
         const total = executions.length;
         const active = activeExecutions.length;
         const history = historyExecutions.length;
-        const contacted = executions.filter(e => (e.realStatus || '').toLowerCase() === 'contactado').length;
-        const finalized = executions.filter(e => (e.realStatus || '').toLowerCase() === 'finalizado').length;
+        const contacted = executions.filter(e => normalizeStatus(e.realStatus) === 'contactado').length;
+        const finalized = executions.filter(e => normalizeStatus(e.realStatus) === 'finalizado').length;
         const conversionRate = total > 0 ? Math.round(((contacted + finalized) / total) * 100) : 0;
 
         const HUMAN_PROCESS_TIME_MS = 783.5 * 60 * 1000;

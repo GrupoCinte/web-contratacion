@@ -1,10 +1,17 @@
 import express from 'express';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, QueryCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
 import WSServer from './websocketServer.js';
 import StreamPoller from './streamPoller.js';
+import rateLimit from 'express-rate-limit';
+import authRoutes from './routes/auth.js';
+import { requireAuth, requireRole } from './middleware/auth.js';
+import { validate, validateQuery } from './middleware/validate.js';
+import { forgotPasswordSchema, requestAccessSchema, emailQuerySchema } from './schemas/auth.js';
+import { mapDynamoItemToExecution } from './utils/mappers.js';
 
 // Load environment variables
 dotenv.config();
@@ -20,8 +27,29 @@ app.use(cors({
 }));
 
 app.use(express.json());
+app.use(cookieParser());
 
-app.use('/api/auth', authRoutes);
+const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { success: false, message: 'Demasiados intentos. Intente de nuevo en 15 minutos.' }
+});
+
+const publicLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 5,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { success: false, message: 'Demasiadas solicitudes. Intente más tarde.' }
+});
+
+app.use('/api/login', authLimiter);
+app.use('/api/forgot-password', publicLimiter);
+app.use('/api/request-access', publicLimiter);
+
+app.use('/api', authRoutes);
 
 // Initialize DynamoDB Client
 const client = new DynamoDBClient({
@@ -36,7 +64,7 @@ const client = new DynamoDBClient({
 const docClient = DynamoDBDocumentClient.from(client);
 
 // API Endpoint: Get running executions
-app.get('/api/monitor', async (req, res) => {
+app.get('/api/monitor', requireAuth, requireRole('ADMIN'), async (req, res) => {
     try {
         const tableName = process.env.DYNAMODB_TABLE_NAME || 'n8n_monitoring';
         // Use Scan to get all users since we want to see the state of everyone
@@ -48,43 +76,7 @@ app.get('/api/monitor', async (req, res) => {
         const response = await docClient.send(command);
 
         // Format the response to adapt to the frontend dashboard
-        // Log the first item to debug fields
-        if (response.Items.length > 0) {
-            console.log('Sample format from DynamoDB:', response.Items[0]);
-        }
-
-        // Format the response to adapt to the frontend dashboard
-        const executions = response.Items.map(item => {
-            // Logic to find the best name available
-            let displayName = 'Sin Nombre';
-
-            // Check for 'nombre y apellido' (with spaces, as seen in logs) or with underscores
-            if (item['nombre y apellido']) {
-                displayName = item['nombre y apellido'];
-            } else if (item.nombre_y_apellido) {
-                displayName = item.nombre_y_apellido;
-            } else if (item.nombre && item.apellido) {
-                displayName = `${item.nombre} ${item.apellido}`;
-            } else if (item.nombre) {
-                displayName = item.nombre;
-            }
-
-            // Check for status or statuses
-            const currentStatus = item.status || item.statuses || 'Desconocido';
-
-            return {
-                executionId: item.whatsapp_number,  // Use whatsapp_number as unique ID
-                workflowName: displayName, // Map Name to Workflow Name
-                currentNodeName: currentStatus, // Map Status to Node Name
-                status: 'running', // Keep 'running' to show as active in frontend
-                timestamp: Date.now(), // Fallback timestamp 
-                // Extra fields for updated frontend
-                email: item.email,
-                puesto: item.puesto,
-                realStatus: currentStatus,
-                fullData: item // Include all raw data for the details view
-            };
-        });
+        const executions = response.Items.map(mapDynamoItemToExecution);
 
         res.json({
             success: true,
@@ -104,16 +96,9 @@ app.get('/api/monitor', async (req, res) => {
 });
 
 // API Endpoint: Get user by email (excluding status field)
-app.get('/api/users-by-email', async (req, res) => {
+app.get('/api/users-by-email', requireAuth, requireRole('ADMIN'), validateQuery(emailQuerySchema), async (req, res) => {
     try {
         const { email } = req.query;
-
-        if (!email) {
-            return res.status(400).json({
-                success: false,
-                error: 'Email parameter is required'
-            });
-        }
 
         const tableName = process.env.DYNAMODB_TABLE_NAME || 'n8n_table_state_users';
         const gsiName = process.env.DYNAMODB_GSI_NAME || 'email'; // GSI name
@@ -127,19 +112,26 @@ app.get('/api/users-by-email', async (req, res) => {
                 ':emailValue': email
             },
             // Specify all fields including 'status'
-            ProjectionExpression: 'whatsapp_number, nombre_y_apellido, email, cedula, edad, puesto, #db, #st',
+            ProjectionExpression: 'nombre_y_apellido, email, edad, puesto, #st',
             ExpressionAttributeNames: {
-                '#db': 'database',
                 '#st': 'status'
             }
         });
 
         const response = await docClient.send(command);
 
+        const safeUsers = response.Items.map(user => ({
+            email: user.email,
+            nombre_y_apellido: user.nombre_y_apellido,
+            puesto: user.puesto,
+            status: user.status,
+            edad: user.edad
+        }));
+
         res.json({
             success: true,
-            count: response.Items.length,
-            users: response.Items
+            count: safeUsers.length,
+            users: safeUsers
         });
 
     } catch (error) {
@@ -161,6 +153,14 @@ app.get('/api/health', (req, res) => {
     });
 });
 
+app.post('/api/forgot-password', validate(forgotPasswordSchema), (req, res) => {
+    res.json({ success: true, message: 'Si el email existe, recibirás instrucciones para restablecer tu contraseña' });
+});
+
+app.post('/api/request-access', validate(requestAccessSchema), (req, res) => {
+    res.json({ success: true, message: 'Solicitud enviada correctamente. Te contactaremos a la brevedad.' });
+});
+
 // Start server
 const server = app.listen(PORT, async () => {
     console.log(`🚀 n8n Monitor Backend running on port ${PORT}`);
@@ -178,6 +178,7 @@ const server = app.listen(PORT, async () => {
     }
 
     // Initialize Stream Poller
+    let streamPollerInstance = null;
     if (wsServer) {
         try {
             const tableName = process.env.DYNAMODB_TABLE_NAME || 'n8n_table_state_users';
@@ -190,6 +191,7 @@ const server = app.listen(PORT, async () => {
             const streamPoller = new StreamPoller(tableName, region, credentials, (data) => {
                 wsServer.broadcast(data);
             });
+            streamPollerInstance = streamPoller;
 
             await streamPoller.start();
             console.log('🌊 DynamoDB Stream Poller initialized and started.');
@@ -199,4 +201,19 @@ const server = app.listen(PORT, async () => {
     } else {
         console.warn('⚠️ WebSocket Server not initialized, skipping Stream Poller initialization.');
     }
+
+    // Graceful Shutdown
+    const gracefulShutdown = () => {
+        console.log('🛑 Shutting down gracefully...');
+        if (streamPollerInstance) {
+            streamPollerInstance.stop();
+        }
+        server.close(() => {
+            console.log('HTTP server closed.');
+            process.exit(0);
+        });
+    };
+
+    process.on('SIGTERM', gracefulShutdown);
+    process.on('SIGINT', gracefulShutdown);
 });

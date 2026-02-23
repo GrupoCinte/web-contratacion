@@ -2,6 +2,7 @@
 import { DynamoDBStreamsClient, DescribeStreamCommand, GetShardIteratorCommand, GetRecordsCommand } from '@aws-sdk/client-dynamodb-streams';
 import { DynamoDBClient, DescribeTableCommand as DDBDescribeTableCommand } from '@aws-sdk/client-dynamodb';
 import { unmarshall } from '@aws-sdk/util-dynamodb';
+import { mapDynamoItemToExecution } from './utils/mappers.js';
 
 class StreamPoller {
     constructor(tableName, region, credentials, callback) {
@@ -280,28 +281,7 @@ class StreamPoller {
         let data = newImage || oldImage;
 
         if (data) {
-            let displayName = 'Sin Nombre';
-            if (data['nombre y apellido']) {
-                displayName = data['nombre y apellido'];
-            } else if (data.nombre_y_apellido) {
-                displayName = data.nombre_y_apellido;
-            } else if (data.nombre) {
-                displayName = data.nombre + (data.apellido ? ' ' + data.apellido : '');
-            }
-
-            const currentStatus = data.status || data.statuses || 'Desconocido';
-
-            const formattedData = {
-                executionId: data.whatsapp_number,
-                workflowName: displayName,
-                currentNodeName: currentStatus,
-                status: 'running',
-                timestamp: Date.now(),
-                email: data.email,
-                puesto: data.puesto,
-                realStatus: currentStatus,
-                fullData: data
-            };
+            const formattedData = mapDynamoItemToExecution(data);
 
             const event = {
                 type: record.eventName,

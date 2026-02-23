@@ -1,9 +1,13 @@
 import express from 'express';
-import { loginUser } from '../controllers/authController.js';
+import { loginUser, verifyToken, logoutUser } from '../controllers/authController.js';
+import { requireAuth } from '../middleware/auth.js';
+import { validate } from '../middleware/validate.js';
+import { loginSchema } from '../schemas/auth.js';
 
 const router = express.Router();
 
-// POST /api/auth/login
-router.post('/login', loginUser);
+router.post('/login', validate(loginSchema), loginUser);
+router.post('/logout', logoutUser);
+router.get('/verify', requireAuth, verifyToken);
 
 export default router;
