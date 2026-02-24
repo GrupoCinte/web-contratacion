@@ -3,6 +3,8 @@ import { Mail, ArrowLeft, Shield, Activity } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
 export default function ForgotPassword() {
   const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -17,8 +19,7 @@ export default function ForgotPassword() {
     setSuccess(false);
 
     try {
-      // Aquí va tu endpoint de recuperación de contraseña
-      await axios.post('http://localhost:3001/api/forgot-password', { email });
+      await axios.post(`${API_BASE_URL}/api/forgot-password`, { email });
       setSuccess(true);
     } catch (error) {
       setError(error.response?.data?.message || 'Error al enviar el correo');
@@ -47,7 +48,7 @@ export default function ForgotPassword() {
 
         {/* Tarjeta principal */}
         <div className="bg-cinte-card/95 rounded-2xl shadow-2xl p-8 space-y-6 border border-cinte-primary/20 backdrop-blur-sm">
-          
+
           {/* Header con logo */}
           <div className="text-center space-y-3">
             <div className="flex justify-center">

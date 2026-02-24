@@ -3,6 +3,8 @@ import { Mail, User, Building, ArrowLeft, Shield, Activity, FileText } from 'luc
 import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
 export default function RequestAccess() {
   const [formData, setFormData] = useState({
     nombre: '',
@@ -28,11 +30,9 @@ export default function RequestAccess() {
     e.preventDefault();
     setIsLoading(true);
     setError('');
-    setSuccess(false);
 
     try {
-      // Aquí va tu endpoint para solicitar acceso
-      await axios.post('http://localhost:3001/api/request-access', formData);
+      await axios.post(`${API_BASE_URL}/api/request-access`, formData);
       setSuccess(true);
     } catch (error) {
       setError(error.response?.data?.message || 'Error al enviar la solicitud');
@@ -61,7 +61,7 @@ export default function RequestAccess() {
 
         {/* Tarjeta principal */}
         <div className="bg-cinte-card/95 rounded-2xl shadow-2xl p-8 space-y-6 border border-cinte-primary/20 backdrop-blur-sm">
-          
+
           {/* Header con logo */}
           <div className="text-center space-y-3">
             <div className="flex justify-center">

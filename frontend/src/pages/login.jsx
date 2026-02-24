@@ -27,26 +27,23 @@ export default function Login() {
     setError('');
 
     try {
-      // Conectar con tu API de backend
-      const response = await axios.post('http://localhost:3001/api/login', {
+      const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+      const response = await axios.post(`${API_BASE_URL}/api/login`, {
         email,
         password,
-      });
+      }, { withCredentials: true });
 
       if (response.status === 200) {
-        // Guardar token si lo devuelve el backend
-        if (response.data.token) {
-          localStorage.setItem('token', response.data.token);
+        if (response.data.wsToken) {
+          sessionStorage.setItem('wsToken', response.data.wsToken);
         }
-        
-        // Guardar preferencia de "recordarme"
+
         if (rememberMe) {
           localStorage.setItem('rememberEmail', email);
         } else {
           localStorage.removeItem('rememberEmail');
         }
-        
-        // Redirigir al dashboard
+
         navigate('/dashboard');
       }
     } catch (error) {

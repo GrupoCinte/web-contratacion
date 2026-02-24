@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import CandidateModal from './CandidateModal';
 import KPICards from './KPICards';
-import { getRelativeTime, calculateProcessTime } from '../hooks/useMonitorData';
+import { getRelativeTime, calculateProcessTime, normalizeStatus } from '../hooks/useMonitorData';
 
 const STATUS_STYLES = {
     finalizado: { bg: 'bg-cinte-green/15', text: 'text-cinte-green', border: 'border-cinte-green/30' },
@@ -13,7 +13,7 @@ const STATUS_STYLES = {
 const DEFAULT_STYLE = { bg: 'bg-zinc-800/50', text: 'text-zinc-400', border: 'border-zinc-700' };
 
 function getStatusStyle(status) {
-    const s = (status || '').toLowerCase();
+    const s = normalizeStatus(status);
     return STATUS_STYLES[s] || DEFAULT_STYLE;
 }
 
@@ -41,7 +41,7 @@ export default function HistoryCandidates({ executions, metrics, loading }) {
             );
             const matchesStatus = statusFilter === 'all'
                 ? true
-                : (ex.realStatus || '').toLowerCase() === statusFilter.toLowerCase();
+                : normalizeStatus(ex.realStatus) === normalizeStatus(statusFilter);
             return matchesSearch && matchesStatus;
         });
 
@@ -53,8 +53,8 @@ export default function HistoryCandidates({ executions, metrics, loading }) {
                     valB = (b.workflowName || '').toLowerCase();
                     return sortDir === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
                 case 'status':
-                    valA = (a.realStatus || '').toLowerCase();
-                    valB = (b.realStatus || '').toLowerCase();
+                    valA = normalizeStatus(a.realStatus);
+                    valB = normalizeStatus(b.realStatus);
                     return sortDir === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
                 case 'puesto':
                     valA = (a.fullData?.puesto || '').toLowerCase();
@@ -255,9 +255,8 @@ function SortableHeader({ label, field, current, dir, onClick, className = '' })
     const isActive = current === field;
     return (
         <th
-            className={`px-4 py-3 text-[10px] font-bold uppercase tracking-widest cursor-pointer select-none transition-colors hover:text-cinte-green ${
-                isActive ? 'text-cinte-green' : 'text-zinc-500'
-            } ${className}`}
+            className={`px-4 py-3 text-[10px] font-bold uppercase tracking-widest cursor-pointer select-none transition-colors hover:text-cinte-green ${isActive ? 'text-cinte-green' : 'text-zinc-500'
+                } ${className}`}
             onClick={() => onClick(field)}
         >
             <div className="flex items-center gap-1">

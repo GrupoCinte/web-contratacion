@@ -13,3 +13,18 @@ yarn-error.log*
 *.swp
 *.swo
 *~
+
+# --- Configuraciones Propias del Proyecto IA Contrataciones ---
+
+# Data de pruebas falsas (Users CSV para simulaciones)
+data/
+
+# Documentación Crítica / Sensible (No exponer topología al exterior)
+N8N_WORKFLOWS_TECHNICAL.md
+N8N_CONFIGURATION.md
+MIGRATION.md
+TROUBLESHOOTING.md
+docs/
+
+# Artefactos o Ejemplos (Puede ser omitido por temas de linters en CI)
+ejemplo-nodo-n8n.js
